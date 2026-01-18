@@ -1,0 +1,5 @@
+[
+  {"order_id": "A001", "product": "ノートPC", "price": 89000, "quantity": 1},
+  {"order_id": "A002", "product": "マウス", "price": 2500, "quantity": 2},
+  {"order_id": "A003", "product": "キーボード", "price": 8000, "quantity": 1}
+]
