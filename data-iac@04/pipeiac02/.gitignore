@@ -34,6 +34,15 @@ tf/.terraform.lock.hcl
 tf/plan_output*
 
 # ========================================
+# OIDC Terraform state（ローカル管理）
+# ========================================
+oidc/.terraform/
+oidc/.terraform.lock.hcl
+oidc/terraform.tfstate
+oidc/terraform.tfstate.backup
+oidc/terraform.tfvars
+
+# ========================================
 # 一般的な除外
 # ========================================
 .DS_Store
