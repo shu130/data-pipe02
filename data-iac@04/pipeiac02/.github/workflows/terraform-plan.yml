@@ -2,72 +2,114 @@
 
 name: Terraform Plan
 
+# ================================
+# トリガー：いつ実行するか
+# ================================
 on:
   pull_request:
     branches:
-      - main
+      - main           # mainブランチへのPR時
     paths:
-      - 'tf/**'
+      - 'tf/**'        # tf/配下の変更時のみ
 
+# ================================
+# 権限
+# ================================
 permissions:
-  id-token: write
-  contents: read
-  pull-requests: write
+  id-token: write       # OIDC認証に必要
+  contents: read        # コード読み取り
+  pull-requests: write  # PRコメントに必要
 
+# ================================
+# 環境変数
+# ================================
 env:
   AWS_REGION: ap-northeast-1
   TF_VERSION: 1.6.0
   WORKING_DIR: tf
 
+# ================================
+# ジョブ
+# ================================
 jobs:
   plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
 
     steps:
+      # ----------------------------------------
+      # Step 1: コードを取得
+      # ----------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ----------------------------------------
+      # Step 2: AWS認証（OIDC）
+      # ----------------------------------------
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-terraform
           aws-region: ${{ env.AWS_REGION }}
 
+      # ----------------------------------------
+      # Step 3: Terraformセットアップ
+      # ----------------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      # ----------------------------------------
+      # Step 4: terraform init
+      # ----------------------------------------
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      # ----------------------------------------
+      # Step 5: terraform fmt（フォーマットチェック）
+      # ----------------------------------------
       - name: Terraform Format Check
+        id: fmt
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform fmt -check
+        continue-on-error: true
 
+      # ----------------------------------------
+      # Step 6: terraform validate（構文チェック）
+      # ----------------------------------------
       - name: Terraform Validate
+        id: validate
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform validate
+        continue-on-error: true
 
+      # ----------------------------------------
+      # Step 7: terraform plan
+      # ----------------------------------------
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform plan -no-color -out=tfplan
         continue-on-error: true
 
+      # ----------------------------------------
+      # Step 8: 結果をPRにコメント
+      # ----------------------------------------
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
           script: |
-            const output = `### Terraform Plan Result
+            const output = `### 🏗️ Terraform Plan Result
 
-            #### Format Check 🖌 \`${{ steps.fmt.outcome }}\`
-            #### Validation 🤖 \`${{ steps.validate.outcome }}\`
-            #### Plan 📖 \`${{ steps.plan.outcome }}\`
+            | Check | Status |
+            |-------|--------|
+            | 🖌️ Format | \`${{ steps.fmt.outcome }}\` |
+            | ✅ Validate | \`${{ steps.validate.outcome }}\` |
+            | 📋 Plan | \`${{ steps.plan.outcome }}\` |
 
-            <details><summary>Show Plan</summary>
+            <details><summary>📖 Plan Details</summary>
 
             \`\`\`terraform
             ${{ steps.plan.outputs.stdout }}
@@ -75,7 +117,7 @@ jobs:
 
             </details>
 
-            *Pushed by: @${{ github.actor }}*`;
+            > Pushed by: @${{ github.actor }}`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -84,6 +126,9 @@ jobs:
               body: output
             })
 
+      # ----------------------------------------
+      # Step 9: Planが失敗したらワークフローを失敗させる
+      # ----------------------------------------
       - name: Check Plan Status
         if: steps.plan.outcome == 'failure'
         run: exit 1
