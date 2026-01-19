@@ -1,0 +1,4 @@
+[
+  {"order_id": "C001", "product": "ヘッドセット", "price": 12000, "quantity": 1},
+  {"order_id": "C002", "product": "マウスパッド", "price": 2000, "quantity": 3}
+]

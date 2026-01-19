@@ -1,0 +1,5 @@
+[
+  {"order_id": "B001", "product": "モニター", "price": 35000, "quantity": 1},
+  {"order_id": "B002", "product": "USBハブ", "price": 3500, "quantity": 2},
+  {"order_id": "B003", "product": "Webカメラ", "price": 8000, "quantity": 1}
+]
