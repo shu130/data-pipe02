@@ -35,4 +35,4 @@ locals {
     ManagedBy   = "Terraform"
   }
 }
-# CI/CD test
+# CI/CD test - GitHub Actions動作確認

@@ -10,7 +10,7 @@ on:
     branches:
       - main           # mainブランチへのPR時
     paths:
-      - 'tf/**'        # tf/配下の変更時のみ
+      - 'tf/**'  # tf/配下の変更時のみ
 
 # ================================
 # 権限
@@ -91,7 +91,7 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
-        run: terraform plan -no-color -out=tfplan
+        run: terraform plan -no-color -out=tfplan -var="alert_email=${{ secrets.ALERT_EMAIL }}"
         continue-on-error: true
 
       # ----------------------------------------

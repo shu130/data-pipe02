@@ -25,7 +25,7 @@ variable "aws_region" {
 variable "bucket_suffix" {
   description = "S3バケット名のサフィックス（日付など）"
   type        = string
-  default     = "20250115"
+  default     = "20260115"
 }
 
 variable "alert_email" {

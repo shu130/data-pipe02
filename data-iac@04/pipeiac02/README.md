@@ -22,6 +22,40 @@ JSON → S3 Raw → EventBridge → Step Functions → Lambda → S3 Processed �
 6. Glue Crawlerがスキーマを検出
 7. Athenaでクエリ可能に
 
+### 1-3. Qiita記事シリーズで解説（全12回）
+
+**Phase 1: 基盤構築**
+
+| # | タイトル | 内容 |
+|---|----------|------|
+| 1 | [全体像](https://qiita.com/shu_tana/items/e886bb72823f82a8a14a) | パイプラインの設計思想 |
+| 2 | [S3設計](https://qiita.com/shu_tana/items/aa2ce567d7e1c24843e1) | Raw/Processedの分離 |
+| 3 | [Lambda ETL](https://qiita.com/shu_tana/items/d642af8e97df6889c4a8) | JSON→Parquet変換 |
+| 4 | [Glue Crawler](https://qiita.com/shu_tana/items/07a2ce2cf0c5dae6711b) | スキーマ自動検出 |
+
+**Phase 2: ワークフロー**
+
+| # | タイトル | 内容 |
+|---|----------|------|
+| 5 | [Step Functions](https://qiita.com/shu_tana/items/81cc4aae5f3c231aadd0) | ワークフロー制御 |
+| 6 | [EventBridge](https://qiita.com/shu_tana/items/507eba3ede0a58191c70) | イベント駆動トリガー |
+
+**Phase 3: セキュリティ・運用**
+
+| # | タイトル | 内容 |
+|---|----------|------|
+| 7 | [IAM最小権限](https://qiita.com/shu_tana/items/aaca1883fc04d1ea8440) | セキュリティ設計 |
+| 8 | [エラーハンドリング](https://qiita.com/shu_tana/items/719ade5d2907d476a6db) | Retry/Catch/SNS通知 |
+| 9 | [CloudWatch監視](https://qiita.com/shu_tana/items/7c5f28b92833e4c2707b) | アラーム・ダッシュボード |
+
+**Phase 4: 開発効率化**
+
+| # | タイトル | 内容 |
+|---|----------|------|
+| 10 | [Terraform構成確認](https://qiita.com/shu_tana/items/06492bd33282a142290d) | ファイル構成・変数管理 |
+| 11 | [CI/CD](https://qiita.com/shu_tana/items/642897b126f16053efd3) | GitHub Actions |
+| 12 | [総まとめ](https://qiita.com/shu_tana/items/a1d8b47e9636bbcd7cd8) | 振り返り・E2Eテスト |
+
 ## 2. アーキテクチャ
 
 ```mermaid
@@ -89,12 +123,18 @@ flowchart TB
 
 ## 4. ディレクトリ構成
 
+第〇回は、Qiita記事の回の意味です。
+
 ```
 pipeiac02/
 ├── .github/
 │   └── workflows/
 │       ├── terraform-plan.yml    # PR時にplan実行
 │       └── terraform-apply.yml   # mainマージ時にapply
+├── oidc/                         # OIDC認証設定（別管理推奨）
+│   ├── main.tf
+│   ├── variables.tf
+│   └── outputs.tf
 ├── test-data/                    # テスト用サンプルデータ
 │   ├── ec-sales-03.json          # 第3回：Lambda ETLテスト
 │   ├── ec-sales-05.json          # 第5回：Step Functionsテスト
@@ -162,6 +202,7 @@ alert_email   = "your@email.com"  # SNS通知先
 #### 5-2-4. Terraform 初期化・適用
 
 ```bash
+# tf/ ディレクトリで実行
 terraform init
 terraform plan
 terraform apply
@@ -177,6 +218,9 @@ terraform apply
 
 #### 5-3-1. S3バケット作成
 
+> **注意:** S3バケット名は**グローバルでユニーク**である必要があります。
+> `dp-tfstate-bucket` は例です。自分専用のユニークな名前に変更してください。
+
 ```bash
 aws s3 mb s3://dp-tfstate-bucket --region ap-northeast-1
 
@@ -186,9 +230,24 @@ aws s3api put-bucket-versioning \
   --versioning-configuration Status=Enabled
 ```
 
-#### 5-3-2. backend.tf のコメントを解除
+#### 5-3-2. backend.tf のバケット名を変更
 
-`tf/backend.tf` を開き、コメントを解除します。
+`tf/backend.tf` を開き、`bucket` を 5-3-1 で作成したバケット名に変更します。
+
+```terraform
+# tf/backend.tf
+
+# Terraformの状態管理をS3で行う設定
+# これにより、チームでの共有やCI/CDが可能になる
+terraform {
+  backend "s3" {
+    bucket  = "dp-tfstate-bucket"           # 保存先バケット
+    key     = "pipeline/terraform.tfstate"  # 保存ファイルのパス
+    region  = "ap-northeast-1"              # リージョン
+    encrypt = true                          # 暗号化を有効化
+  }
+}
+```
 
 #### 5-3-3. State移行
 
@@ -199,7 +258,42 @@ terraform init -migrate-state
 
 **確認メッセージが表示されたら `yes` と入力**
 
+### 5-4. （オプション）OIDC認証の設定（CI/CD用）
+
+GitHub ActionsからAWSを操作するには、OIDC認証の設定が必要です。
+`oidc/` ディレクトリは `tf/` とは別管理です。
+
+> 詳細は [第11回：CI/CD](https://qiita.com/shu_tana/items/642897b126f16053efd3) を参照してください。
+
+#### 5-4-1. 変数ファイルを作成
+
+```bash
+cd oidc
+touch terraform.tfvars
+```
+
+#### 5-4-2. terraform.tfvars を編集
+
+```hcl
+github_username = "your-github-username"  # GitHubユーザー名
+github_repo     = "pipeiac02"             # リポジトリ名
+```
+
+#### 5-4-3. Terraform 初期化・適用
+
+```bash
+# oidc/ ディレクトリで実行
+terraform init
+terraform plan
+terraform apply
+```
+
+> **注意:** `oidc/` は一度だけ実行すれば完了です。
+> 以降のパイプライン管理は `tf/` ディレクトリで行います。
+
 ## 6. 使い方
+
+> **注意:** 以下のコマンドはすべて `tf/` ディレクトリで実行してください。
 
 ### 6-1. データをアップロード
 
@@ -207,8 +301,8 @@ terraform init -migrate-state
 # バケット名を取得
 RAW_BUCKET=$(terraform output -raw raw_bucket_id)
 
-# テストデータをアップロード
-aws s3 cp test-data.json s3://$RAW_BUCKET/input/
+# テストデータをアップロード（例：第3回のテストデータ）
+aws s3 cp test-data/ec-sales-03.json s3://$RAW_BUCKET/input/ec-sales.json
 ```
 
 ### 6-2. パイプライン実行確認
@@ -282,52 +376,39 @@ aws s3 cp test-data/e2e-test.json s3://$RAW_BUCKET/input/
 | quantity | number | 数量 |
 | date | string | 日付（E2Eテストのみ） |
 
-## 8. 作成されるリソース
+## 8. 作成されるAWSリソース
 
-| リソース | 名前 | 用途 |
-|----------|------|------|
-| S3 | dp-raw-* | 生データ保存 |
-| S3 | dp-processed-* | 加工済みデータ保存 |
-| Lambda | dp-etl | JSON→Parquet変換 |
-| Glue Database | dp_db | メタデータ管理 |
-| Glue Crawler | dp-crawler | スキーマ自動検出 |
-| Step Functions | dp-pipeline | ワークフロー管理 |
-| EventBridge Rule | dp-s3-upload | S3イベント検知 |
-| SNS Topic | dp-alert | エラー通知 |
-| CloudWatch Alarm | dp-lambda-errors | Lambda監視 |
-| IAM Role | dp-lambda-etl-role, dp-glue-crawler-role, dp-sfn-role, dp-eventbridge-role | 各サービス用権限 |
+| カテゴリ | リソース | 用途 |
+|----------|----------|------|
+| ストレージ | S3 Bucket | 生データ保存（raw） |
+| ストレージ | S3 Bucket | 加工データ保存（processed） |
+| コンピュート | Lambda | ETL処理（JSON→Parquet） |
+| カタログ | Glue Database | メタデータ管理 |
+| カタログ | Glue Crawler | スキーマ自動検出 |
+| オーケストレーション | Step Functions | ワークフロー制御 |
+| イベント | EventBridge Rule | S3アップロード検知 |
+| イベント | S3 Notification | EventBridge連携有効化 |
+| 認証 | IAM Role (×4) | Lambda/Glue/SFn/EventBridge用 |
+| 通知 | SNS Topic | アラート通知先 |
+| 通知 | SNS Subscription | メール通知設定 |
+| 監視 | CloudWatch Alarm | Lambdaエラー検知 |
+| 監視 | CloudWatch Dashboard | 状態可視化 |
 
 ## 9. クリーンアップ
 
 ```bash
+# リソース削除
 cd tf
 terraform destroy
 ```
 
-## 10. 関連記事
 
-このプロジェクトの詳細は Qiita 記事シリーズで解説しています（全12回）。
-
-| # | タイトル | 内容 |
-|---|----------|------|
-| 1 | 全体像 | パイプラインの設計思想 |
-| 2 | S3設計 | Raw/Processedの分離 |
-| 3 | Lambda ETL | JSON→Parquet変換 |
-| 4 | Glue Crawler | スキーマ自動検出 |
-| 5 | Step Functions | ワークフロー制御 |
-| 6 | EventBridge | イベント駆動トリガー |
-| 7 | IAM最小権限 | セキュリティ設計 |
-| 8 | エラーハンドリング | Retry/Catch/SNS通知 |
-| 9 | CloudWatch監視 | アラーム・ダッシュボード |
-| 10 | Terraform設計 | ファイル構成・変数管理 |
-| 11 | CI/CD | GitHub Actions |
-| 12 | 総まとめ | 振り返り・E2Eテスト |
-
-## 11. ライセンス
+## 10. ライセンス
 
 MIT License
 
-## 12. 作成者
+## 11. 作成者
 
 [@shu130](https://github.com/shu130)
 
+---

@@ -10,7 +10,7 @@ on:
     branches:
       - main           # mainブランチへのプッシュ時
     paths:
-      - 'tf/**'        # tf/配下の変更時のみ
+      - 'tf/**'  # tf/配下の変更時のみ
 
 # ================================
 # 権限
@@ -71,4 +71,4 @@ jobs:
       # ----------------------------------------
       - name: Terraform Apply
         working-directory: ${{ env.WORKING_DIR }}
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve -var="alert_email=${{ secrets.ALERT_EMAIL }}"
